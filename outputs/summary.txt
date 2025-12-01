@@ -1,0 +1,24 @@
+LEVERED HEDGE ENGINE - BACKTEST SUMMARY
+============================================================
+
+Portfolio Results
+------------------------------------------------------------
+Final Portfolio Value:  $863,297.28
+Final Index Value:      4.1743
+
+Portfolio CAGR:         21.57%
+Index CAGR:             13.76%
+Alpha (CAGR):           7.81%
+
+Portfolio Max DD:       -33.26%
+Index Max DD:           -35.00%
+
+Portfolio Sharpe:       1.07
+Index Sharpe:           0.83
+Sharpe Advantage:       0.24
+
+Sleeve Analysis
+------------------------------------------------------------
+Final Hedged Weight:    79.19%
+Final Unhedged Weight:  20.81%
+Initial Allocation:     70% / 30%
