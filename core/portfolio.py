@@ -6,6 +6,7 @@ Tracks value evolution and weight drift over time.
 """
 
 from dataclasses import dataclass
+from typing import Dict
 import pandas as pd
 from config.strategy_config import StrategyConfig
 from .sleeves import HedgedSleeve, UnhedgedSleeve
@@ -21,11 +22,19 @@ class Portfolio:
     """
     
     config: StrategyConfig
+    _current_hedged_value: float = None
+    _current_unhedged_value: float = None
 
     def __post_init__(self):
-        """Initialize the two portfolio sleeves."""
+        """Initialize the two portfolio sleeves and current state."""
         self.hedged_sleeve = HedgedSleeve(self.config)
         self.unhedged_sleeve = UnhedgedSleeve(self.config)
+        
+        # Initialize current state for real-time updates
+        if self._current_hedged_value is None:
+            self._current_hedged_value = self.config.initial_capital * self.config.hedged_weight
+        if self._current_unhedged_value is None:
+            self._current_unhedged_value = self.config.initial_capital * self.config.unhedged_weight
 
     def run_path(self, index_returns: pd.Series) -> pd.DataFrame:
         """
@@ -131,3 +140,53 @@ class Portfolio:
             })
 
         return pd.DataFrame.from_records(records).set_index("date")
+    
+    def update_realtime(self, ndx_price_today: float, ndx_price_yesterday: float, 
+                       current_date) -> Dict:
+        """
+        Update portfolio state for a single day of real-time performance.
+        
+        Computes the NDX return and applies the same daily P&L logic as run_path.
+        Maintains internal state (_current_hedged_value, _current_unhedged_value)
+        for subsequent real-time calls.
+        
+        Args:
+            ndx_price_today: NDX closing price today
+            ndx_price_yesterday: NDX closing price yesterday
+            current_date: Current date (for logging)
+            
+        Returns:
+            Dictionary with:
+                - date: Current date
+                - equity_total: Total portfolio equity
+                - equity_hedged: Hedged sleeve equity
+                - equity_unhedged: Unhedged sleeve equity
+                - ndx_return: NDX daily return
+                - notional_hedged: Notional value (weight) of hedged portion
+                - notional_unhedged: Notional value (weight) of unhedged portion
+        """
+        # Compute NDX return
+        ndx_return = (ndx_price_today / ndx_price_yesterday) - 1
+        
+        # Map index return to sleeve returns
+        r_hedged = self.hedged_sleeve.map_index_return(ndx_return)
+        r_unhedged = self.unhedged_sleeve.map_index_return(ndx_return)
+        
+        # Update sleeve values
+        self._current_hedged_value *= (1 + r_hedged)
+        self._current_unhedged_value *= (1 + r_unhedged)
+        total_value = self._current_hedged_value + self._current_unhedged_value
+        
+        # Calculate current weights
+        hedged_weight = self._current_hedged_value / total_value if total_value > 0 else 0
+        unhedged_weight = self._current_unhedged_value / total_value if total_value > 0 else 0
+        
+        return {
+            'date': current_date,
+            'equity': total_value,
+            'hedged_value': self._current_hedged_value,
+            'unhedged_value': self._current_unhedged_value,
+            'ndx_return': ndx_return,
+            'hedged_weight': hedged_weight,
+            'unhedged_weight': unhedged_weight,
+        }

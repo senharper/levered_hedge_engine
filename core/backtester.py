@@ -11,6 +11,8 @@ Orchestrates the complete backtesting workflow:
 from pathlib import Path
 from typing import Optional, Dict
 import pandas as pd
+import csv
+from datetime import datetime
 
 from config.strategy_config import StrategyConfig
 from .data_loader import DataLoader
@@ -117,3 +119,63 @@ class Backtester:
             DataFrame with time series or None if backtest hasn't run
         """
         return self.results_df
+    
+    def update_realtime(self, current_ndx_price: float, previous_ndx_price: float, 
+                        current_date) -> Dict:
+        """
+        Update portfolio based on current NDX price (real-time).
+        
+        Computes ndx_return = (current_ndx_price / previous_ndx_price) - 1.
+        Uses internal step logic to update equity, futures notional, and cash.
+        
+        Args:
+            current_ndx_price: Current NDX price
+            previous_ndx_price: Previous NDX price
+            current_date: Current date
+            
+        Returns:
+            Dictionary with: date, equity, futures_notional, cash, ndx_return
+        """
+        # Compute return
+        ndx_return = (current_ndx_price / previous_ndx_price) - 1
+        
+        # Create a minimal series with this single return
+        index_returns = pd.Series({current_date: ndx_return})
+        
+        # Run one step of simulation
+        results_df = self.portfolio.run_path(index_returns)
+        
+        # Extract the final state
+        final_row = results_df.iloc[-1]
+        
+        return {
+            'date': current_date,
+            'equity': final_row['total_value'],
+            'hedged_value': final_row['hedged_value'],
+            'unhedged_value': final_row['unhedged_value'],
+            'hedged_weight': final_row['hedged_weight'],
+            'unhedged_weight': final_row['unhedged_weight'],
+            'ndx_price': current_ndx_price,
+            'ndx_return': ndx_return,
+        }
+    
+    def log_state_to_csv(self, path: str, record: Dict) -> None:
+        """
+        Append the provided record to a CSV file.
+        Creates the file with headers if it does not exist.
+        
+        Args:
+            path: Path to CSV file
+            record: Dictionary with state to log
+        """
+        path = Path(path)
+        file_exists = path.exists()
+        
+        with open(path, 'a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=record.keys())
+            
+            # Write header if file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            writer.writerow(record)
